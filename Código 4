@@ -1,0 +1,61 @@
+import pandas as pd
+import numpy as np
+
+PASTA_DADOS = 'dados_cvm'
+
+def criar_features():
+    print("1. A carregar o histórico de Ações...")
+    df = pd.read_csv(f'{PASTA_DADOS}/historico_acoes_consolidado.csv')
+    df['DT_COMPTC'] = pd.to_datetime(df['DT_COMPTC'])
+    
+    
+    df = df.sort_values(by=['CNPJ_FUNDO', 'DT_COMPTC'])
+    
+    print("2. A calcular os Fluxos Diários...")
+    
+    df['FLUXO_DIA'] = df['CAPTC_DIA'] - df['RESG_DIA']
+    
+    
+    df['PL_ONTEM'] = df.groupby('CNPJ_FUNDO')['VL_PATRIM_LIQ'].shift(1)
+    df['FLUXO_NORM'] = df['FLUXO_DIA'] / df['PL_ONTEM']
+    
+    print("3. A criar o Target da Kinea (Soma do Fluxo T+1 até T+21)...")
+    
+    df_invertido = df.sort_values(by=['CNPJ_FUNDO', 'DT_COMPTC'], ascending=[True, False])
+    
+    
+    df_invertido['SOMA_21D'] = df_invertido.groupby('CNPJ_FUNDO')['FLUXO_NORM'].rolling(21, min_periods=10).sum().reset_index(0, drop=True)
+    
+    
+    df_invertido['TARGET_FLUXO_21D'] = df_invertido.groupby('CNPJ_FUNDO')['SOMA_21D'].shift(1)
+    
+    
+    df = df_invertido.sort_values(by=['CNPJ_FUNDO', 'DT_COMPTC'])
+    
+    print("4. A calcular Features de Passado (Retorno e Volatilidade)...")
+    
+    df['RETORNO_DIA'] = df.groupby('CNPJ_FUNDO')['VL_QUOTA'].pct_change(1)
+    
+    
+    df['RETORNO_21D'] = df.groupby('CNPJ_FUNDO')['VL_QUOTA'].pct_change(21)
+    
+    
+    vol_diaria = df.groupby('CNPJ_FUNDO')['RETORNO_DIA'].rolling(21, min_periods=10).std().reset_index(0, drop=True)
+    df['VOLATILIDADE_21D'] = vol_diaria * np.sqrt(252) # 252 dias úteis no ano
+    
+    
+    df.drop(columns=['SOMA_21D'], inplace=True)
+    
+    print("\n--- Raio-X das Features ---")
+    print("Amostra das novas colunas criadas:")
+    
+    fundo_exemplo = df['CNPJ_FUNDO'].iloc[0]
+    amostra = df[df['CNPJ_FUNDO'] == fundo_exemplo][['DT_COMPTC', 'TARGET_FLUXO_21D', 'RETORNO_21D', 'VOLATILIDADE_21D']].dropna().tail(5)
+    print(amostra)
+    
+    caminho_saida = f'{PASTA_DADOS}/base_features_inicial.csv'
+    df.to_csv(caminho_saida, index=False)
+    print(f"\n[OK] Base com features salva em: {caminho_saida}")
+
+if __name__ == "__main__":
+    criar_features()

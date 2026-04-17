@@ -1,0 +1,53 @@
+import pandas as pd
+import os
+
+PASTA_DADOS = 'dados_cvm'
+
+def gerar_chave_mestra_definitiva():
+    print("A ler a base oficial de classes da CVM...")
+    caminho_classe = f'{PASTA_DADOS}/registro_classe.csv'
+    
+    
+    try:
+        df_classe = pd.read_csv(caminho_classe, sep=';', encoding='utf-8', low_memory=False)
+    except:
+        df_classe = pd.read_csv(caminho_classe, sep=';', encoding='latin1', low_memory=False)
+    
+    
+    df_classe['Situacao'] = df_classe['Situacao'].astype(str).str.strip().str.upper()
+    col_cotas = df_classe['Classe_Cotas'].astype(str).str.upper()
+    col_anbima = df_classe['Classificacao_Anbima'].astype(str).str.upper()
+    
+    
+    mascara_sit = df_classe['Situacao'] == 'EM FUNCIONAMENTO NORMAL'
+    
+    
+    busca_acoes = 'AÇÕES|ACOES|AÇOES|AÃ'
+    mascara_acoes = col_cotas.str.contains(busca_acoes, regex=True, na=False) | \
+                    col_anbima.str.contains(busca_acoes, regex=True, na=False)
+    
+    
+    df_acoes_ativos = df_classe[mascara_sit & mascara_acoes]
+    
+    qtd_fundos = len(df_acoes_ativos['CNPJ_Classe'].unique())
+    
+    print("\n--- Resultado do Filtro de Escopo ---")
+    print(f"Total de classes ativas mapeadas: {mascara_sit.sum()}")
+    print(f"Resultado Final: {qtd_fundos} fundos de ações ativos encontrados!")
+    
+    if qtd_fundos >= 50:
+        print("\n=> SUCESSO! Critério de Escopo da Kinea (>= 50 fundos) atingido.")
+    else:
+        print("\n=> ATENÇÃO: Falha na extração de volume.")
+        return
+        
+    
+    df_saida = df_acoes_ativos[['CNPJ_Classe', 'Denominacao_Social', 'Data_Constituicao']].copy()
+    df_saida.rename(columns={'CNPJ_Classe': 'CNPJ_FUNDO'}, inplace=True)
+    
+    caminho_saida = f'{PASTA_DADOS}/fundos_acoes_filtrados.csv'
+    df_saida.to_csv(caminho_saida, index=False)
+    print(f"\n[OK] Chave-mestra guardada com sucesso em: {caminho_saida}")
+
+if __name__ == "__main__":
+    gerar_chave_mestra_definitiva()

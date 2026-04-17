@@ -1,0 +1,39 @@
+import pandas as pd
+
+PASTA_DADOS = 'dados_cvm'
+
+def finalizar_dataset():
+    print("1. A carregar as features...")
+    df = pd.read_csv(f'{PASTA_DADOS}/base_features_inicial.csv')
+    df['DT_COMPTC'] = pd.to_datetime(df['DT_COMPTC'])
+
+    print("2. A limpar a 'Borda Cega' e os Fundos Master...")
+    data_corte = df['DT_COMPTC'].max() - pd.Timedelta(days=21)
+    df_limpo = df[df['DT_COMPTC'] <= data_corte].copy()
+
+    fundos_com_fluxo = df_limpo.groupby('CNPJ_FUNDO')['TARGET_FLUXO_21D'].std()
+    cnpjs_validos = fundos_com_fluxo[fundos_com_fluxo > 0].index
+    df_limpo = df_limpo[df_limpo['CNPJ_FUNDO'].isin(cnpjs_validos)].copy()
+
+    print("3. A criar o Target de Classificação (Vetorizado e Seguro)...")
+    
+    limites_diarios = df_limpo.groupby('DT_COMPTC')['TARGET_FLUXO_21D'].transform(
+        lambda x: x.quantile(0.90) if x.max() > 0 else float('inf')
+    )
+    
+    
+    df_limpo['TARGET_TOP_DECILE'] = (df_limpo['TARGET_FLUXO_21D'] > limites_diarios).astype(int)
+    
+    df_final = df_limpo.dropna()
+
+    print(f"\n--- Dataset Final Pronto para Machine Learning ---")
+    print(f"Total de linhas limpas e válidas: {len(df_final)}")
+    print(f"Total de fundos a ser analisados: {df_final['CNPJ_FUNDO'].nunique()}")
+    print(f"Proporção da classe positiva (Top Decile): {df_final['TARGET_TOP_DECILE'].mean():.1%}")
+
+    caminho_saida = f'{PASTA_DADOS}/dataset_kinea_final.csv'
+    df_final.to_csv(caminho_saida, index=False)
+    print(f"\n[OK] Base definitiva guardada em: {caminho_saida}")
+
+if __name__ == "__main__":
+    finalizar_dataset()

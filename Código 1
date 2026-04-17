@@ -1,0 +1,49 @@
+import pandas as pd
+import requests
+import zipfile
+import io
+import os
+
+
+PASTA_DADOS = 'dados_cvm'
+os.makedirs(PASTA_DADOS, exist_ok=True)
+
+def descarregar_cadastro_cvm():
+    """Descarrega e guarda o cadastro completo de fundos da CVM."""
+    print("A descarregar o Cadastro de Fundos...")
+    url_cad = "http://dados.cvm.gov.br/dados/FI/CAD/DADOS/cad_fi.csv"
+    
+    
+    df_cad = pd.read_csv(url_cad, sep=';', encoding='latin1', low_memory=False)
+    df_cad.to_csv(f'{PASTA_DADOS}/cad_fi.csv', index=False)
+    print("Cadastro guardado com sucesso!")
+    return df_cad
+
+def descarregar_informe_diario(meses):
+    """Descarrega os ficheiros ZIP do Informe Diário e extrai os CSVs."""
+    for mes in meses:
+        print(f"A descarregar o Informe Diário de {mes}...")
+        url_inf = f"http://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS/inf_diario_fi_{mes}.zip"
+        
+        response = requests.get(url_inf)
+        if response.status_code == 200:
+            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                z.extractall(PASTA_DADOS)
+            print(f"Dados de {mes} extraídos com sucesso!")
+        else:
+            print(f"Erro ao descarregar dados de {mes}. Verifique se o mês está disponível.")
+
+
+if __name__ == "__main__":
+    # 1. Descarregar Cadastro
+    df_cadastro = descarregar_cadastro_cvm()
+    
+    # 2. Definir os últimos 12 meses desejados (formato YYYYMM)
+    # A utilizar os 12 meses mais recentes até março de 2026
+    meses_alvo = ['202504', '202505', '202506', '202507', '202508', '202509', '202510', '202511', '202512', '202601', '202602', '202603'] 
+    
+    # Descarregar Informes
+    descarregar_informe_diario(meses_alvo)
+
+
+
